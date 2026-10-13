@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>校园购物助手 Agent</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f7fa; color: #1f2937; line-height: 1.6;
+  }
+  .app { max-width: 900px; margin: 0 auto; padding: 24px 16px 100px; }
+
+  /* 顶部 */
+  .header { text-align: center; padding: 28px 0 20px; }
+  .header h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+  .header p { color: #6b7280; font-size: 14px; }
+  .limits {
+    display: inline-flex; gap: 14px; margin-top: 12px;
+    padding: 6px 16px; background: #fff; border: 1px solid #e5e7eb;
+    border-radius: 20px; font-size: 12px; color: #6b7280;
+  }
+  .limits b { color: #3b82f6; }
+
+  /* 工具面板 */
+  .tools-panel {
+    background: #fff; border-radius: 12px; padding: 16px 20px;
+    margin-bottom: 20px; border: 1px solid #e5e7eb;
+  }
+  .tools-panel h3 { font-size: 13px; color: #6b7280; font-weight: 600; margin-bottom: 10px; }
+  .tool-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tool-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; background: #f9fafb;
+    border: 1px solid #e5e7eb; border-radius: 6px;
+    font-size: 12px; font-family: "SF Mono", Consolas, monospace;
+    color: #374151;
+  }
+  .tool-tag .lv {
+    font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    font-weight: 600; font-family: inherit;
+  }
+  .lv.safe { background: #dcfce7; color: #15803d; }
+  .lv.sensitive { background: #fef3c7; color: #b45309; }
+  .lv.dangerous { background: #fee2e2; color: #b91c1c; }
+
+  /* 对话区 */
+  .chat { display: flex; flex-direction: column; gap: 16px; }
+  .msg { display: flex; gap: 12px; animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .msg.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .msg.user .avatar { background: #3b82f6; color: #fff; }
+  .msg.agent .avatar { background: #10b981; color: #fff; }
+
+  .bubble { max-width: 78%; }
+  .msg.user .bubble {
+    background: #3b82f6; color: #fff; padding: 10px 16px;
+    border-radius: 12px 12px 2px 12px; white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.agent .bubble {
+    background: #fff; padding: 14px 18px;
+    border-radius: 12px 12px 12px 2px; border: 1px solid #e5e7eb;
+    white-space: pre-wrap; word-break: break-word;
+  }
+
+  /* 推理过程（核心看点） */
+  .thinking {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+    padding: 14px 18px; max-width: 78%; margin-left: 48px;
+  }
+  .thinking-title {
+    font-size: 13px; font-weight: 600; color: #6b7280;
+    display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
+    padding-bottom: 10px; border-bottom: 1px dashed #e5e7eb; margin-bottom: 10px;
+  }
+  .thinking-title .arrow { transition: transform .2s; font-size: 10px; }
+  .thinking.collapsed .arrow { transform: rotate(-90deg); }
+  .thinking.collapsed .steps { display: none; }
+
+  .step { display: flex; gap: 10px; padding: 8px 0; font-size: 13px; border-bottom: 1px solid #f3f4f6; }
+  .step:last-child { border-bottom: none; }
+  .step-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #dbeafe; color: #2563eb; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 2px;
+  }
+  .step-body { flex: 1; min-width: 0; }
+  .step-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .step-tool { font-family: "SF Mono", Consolas, monospace; color: #7c3aed; font-weight: 600; }
+  .step-args {
+    font-family: "SF Mono", Consolas, monospace; color: #6b7280; font-size: 12px;
+    background: #f9fafb; padding: 2px 6px; border-radius: 4px;
+  }
+  .step-time { font-size: 11px; color: #9ca3af; margin-left: auto; }
+  .step-result {
+    margin-top: 5px; font-size: 12px; color: #4b5563; background: #f9fafb;
+    padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; word-break: break-word;
+    border-left: 3px solid #d1d5db; max-height: 120px; overflow-y: auto;
+  }
+  .step.failed .step-result { border-left-color: #fca5a5; background: #fef2f2; }
+
+  /* 统计条 */
+  .stats {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    margin-left: 48px; font-size: 12px; color: #9ca3af;
+  }
+  .stats span { display: flex; align-items: center; gap: 4px; }
+  .stats .ok { color: #059669; }
+  .stats .warn { color: #d97706; }
+  .stats .err { color: #dc2626; }
+  .stats .mem { color: #7c3aed; }
+
+  /* 输入区 */
+  .composer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(255,255,255,.95); backdrop-filter: blur(8px);
+    border-top: 1px solid #e5e7eb; padding: 14px 16px;
+  }
+  .composer-inner { max-width: 900px; margin: 0 auto; display: flex; gap: 10px; }
+  .composer input {
+    flex: 1; padding: 12px 16px; border: 1px solid #d1d5db;
+    border-radius: 10px; font-size: 14px; outline: none; transition: border-color .2s;
+  }
+  .composer input:focus { border-color: #3b82f6; }
+  .composer button {
+    padding: 12px 24px; background: #3b82f6; color: #fff;
+    border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: background .2s; white-space: nowrap;
+  }
+  .composer button:hover:not(:disabled) { background: #2563eb; }
+  .composer button:disabled { background: #9ca3af; cursor: not-allowed; }
+
+  /* 加载动画 */
+  .loading { display: flex; gap: 4px; padding: 6px 0; }
+  .loading span {
+    width: 7px; height: 7px; border-radius: 50%; background: #9ca3af;
+    animation: bounce 1.4s infinite ease-in-out both;
+  }
+  .loading span:nth-child(1) { animation-delay: -0.32s; }
+  .loading span:nth-child(2) { animation-delay: -0.16s; }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: .5; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  .empty { text-align: center; padding: 60px 20px; color: #9ca3af; }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>🛒 校园购物助手</h1>
+    <p>基于 Function Calling + ReAct 的多步推理 Agent</p>
+    <div class="limits" id="limits"></div>
+    <div style="margin-top:10px">
+      <button id="clearBtn" style="padding:5px 14px;font-size:12px;background:#fff;
+        border:1px solid #e5e7eb;border-radius:14px;color:#6b7280;cursor:pointer">
+        🗑️ 清空对话记忆
+      </button>
+    </div>
+  </div>
+
+  <div class="tools-panel">
+    <h3>🔧 可调用的工具</h3>
+    <div class="tool-tags" id="toolTags">
+      <span class="tool-tag">加载中...</span>
+    </div>
+  </div>
+
+  <div class="chat" id="chat">
+    <div class="empty">
+      <div class="empty-icon">💬</div>
+      <div>试着问点什么，观察 Agent 的推理过程</div>
+    </div>
+  </div>
+</div>
+
+<div class="composer">
+  <div class="composer-inner">
+    <input id="input" type="text" placeholder="比如：帮我找两本便宜的考研书，看看卖家靠不靠谱" autocomplete="off">
+    <button id="send">发送</button>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8100';
+
+// 会话 ID：刷新页面也保持同一个会话，这样上下文不会丢
+const SESSION_ID = (() => {
+  let id = sessionStorage.getItem('agent_session');
+  if (!id) {
+    id = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    sessionStorage.setItem('agent_session', id);
+  }
+  return id;
+})();
+const chatEl = document.getElementById('chat');
+const inputEl = document.getElementById('input');
+const sendEl = document.getElementById('send');
+let busy = false;
+
+// ==================== 工具与限额 ====================
+
+async function loadMeta() {
+  try {
+    // 工具列表（含权限级别）
+    const res = await fetch(`${API}/agent/tools`);
+    const data = await res.json();
+    document.getElementById('toolTags').innerHTML = data.tools.map(t =>
+      `<span class="tool-tag">${t.name}()<span class="lv ${t.level}">${t.level}</span></span>`
+    ).join('');
+
+    // 限额
+    const h = await (await fetch(`${API}/health`)).json();
+    document.getElementById('limits').innerHTML =
+      `<span>最大步数 <b>${h.limits.max_steps}</b></span>` +
+      `<span>总超时 <b>${h.limits.total_timeout}s</b></span>` +
+      `<span>Token 预算 <b>${h.limits.token_budget}</b></span>`;
+  } catch (e) {
+    document.getElementById('toolTags').innerHTML =
+      '<span class="tool-tag" style="color:#dc2626">服务未启动，请先运行 python main.py</span>';
+  }
+}
+
+// ==================== 渲染 ====================
+
+function clearEmpty() {
+  const e = chatEl.querySelector('.empty');
+  if (e) e.remove();
+}
+
+function addUserMessage(text) {
+  clearEmpty();
+  const d = document.createElement('div');
+  d.className = 'msg user';
+  d.innerHTML = `<div class="avatar">👤</div><div class="bubble">${esc(text)}</div>`;
+  chatEl.appendChild(d);
+  scrollBottom();
+}
+
+function addLoading() {
+  const d = document.createElement('div');
+  d.className = 'msg agent';
+  d.id = 'loadingMsg';
+  d.innerHTML = `
+    <div class="avatar">🤖</div>
+    <div class="bubble">
+      <div class="loading"><span></span><span></span><span></span></div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:6px">Agent 正在推理...</div>
+    </div>`;
+  chatEl.appendChild(d);
+  scrollBottom();
+}
+
+function removeLoading() {
+  const el = document.getElementById('loadingMsg');
+  if (el) el.remove();
+}
+
+/** 推理过程 —— 核心看点 */
+function renderThinking(toolCalls, steps, elapsed) {
+  if (!toolCalls || !toolCalls.length) return '';
+
+  const items = toolCalls.map(tc => `
+    <div class="step ${tc.ok ? '' : 'failed'}">
+      <div class="step-num">${tc.step}</div>
+      <div class="step-body">
+        <div class="step-head">
+          <span class="step-tool">${tc.tool}</span>
+          <span class="lv ${tc.level}">${tc.level}</span>
+          <span class="step-args">${fmtArgs(tc.args)}</span>
+          <span class="step-time">${tc.elapsed}s</span>
+        </div>
+        <div class="step-result">${esc(trunc(tc.result, 300))}</div>
+      </div>
+    </div>`).join('');
+
+  return `
+    <div class="thinking">
+      <div class="thinking-title">
+        <span class="arrow">▼</span>
+        🧠 推理过程 · ${toolCalls.length} 次工具调用 · ${steps} 步 · ${elapsed}s
+      </div>
+      <div class="steps">${items}</div>
+    </div>`;
+}
+
+function fmtArgs(args) {
+  const es = Object.entries(args || {});
+  return es.length ? es.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ') : '()';
+}
+
+function trunc(s, n) { return s && s.length > n ? s.slice(0, n) + '...' : (s || ''); }
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+function addAgentMessage(data) {
+  // 推理过程
+  if (data.tool_calls && data.tool_calls.length) {
+    const d = document.createElement('div');
+    d.className = 'msg agent';
+    d.innerHTML = `<div class="avatar">🤖</div>` + renderThinking(data.tool_calls, data.steps, data.elapsed);
+    chatEl.appendChild(d);
+    const t = d.querySelector('.thinking-title');
+    const b = d.querySelector('.thinking');
+    if (t && b) t.onclick = () => b.classList.toggle('collapsed');
+  }
+
+  // 回答
+  const a = document.createElement('div');
+  a.className = 'msg agent';
+  a.innerHTML = `<div class="avatar" style="visibility:hidden"></div>
+                 <div class="bubble">${esc(data.answer)}</div>`;
+  chatEl.appendChild(a);
+
+  // 统计条
+  const STOP = {
+    completed: ['✅ 完成', 'ok'],
+    max_steps: ['⚠️ 达到最大步数', 'warn'],
+    timeout: ['⏱️ 处理超时', 'warn'],
+    token_budget: ['💰 超出 Token 预算', 'warn'],
+    llm_error: ['❌ 模型调用失败', 'err'],
+  };
+  const [label, cls] = STOP[data.stopped_by] || ['完成', 'ok'];
+  const u = data.usage || {};
+
+  const s = document.createElement('div');
+  s.className = 'stats';
+  const mem = data.history_turns > 0
+    ? `<span class="mem">🧠 已载入 ${data.history_turns} 轮上下文</span>`
+    : `<span>🧠 首轮对话</span>`;
+  s.innerHTML = `
+    <span class="${cls}">${label}</span>
+    <span>⚡ ${data.elapsed}s</span>
+    <span>🔧 ${data.tool_calls ? data.tool_calls.length : 0} 次调用</span>
+    <span>🎫 Token ${u.total_tokens || 0}</span>
+    ${mem}`;
+  chatEl.appendChild(s);
+
+  scrollBottom();
+}
+
+function addError(text) {
+  const d = document.createElement('div');
+  d.className = 'msg agent';
+  d.innerHTML = `<div class="avatar" style="background:#ef4444">!</div>
+    <div class="bubble" style="border-color:#fecaca;background:#fef2f2;color:#b91c1c">${esc(text)}</div>`;
+  chatEl.appendChild(d);
+  scrollBottom();
+}
+
+function scrollBottom() {
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+// ==================== 发送 ====================
+
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text || busy) return;
+
+  busy = true;
+  sendEl.disabled = true;
+  inputEl.value = '';
+
+  addUserMessage(text);
+  addLoading();
+
+  try {
+    const res = await fetch(`${API}/agent/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, session_id: SESSION_ID }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    removeLoading();
+    addAgentMessage(data);
+  } catch (e) {
+    removeLoading();
+    addError(`请求失败：${e.message}\n\n请确认 Agent 服务已启动（python main.py）`);
+  } finally {
+    busy = false;
+    sendEl.disabled = false;
+    inputEl.focus();
+  }
+}
+
+sendEl.onclick = send;
+inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+// 清空对话记忆
+document.getElementById('clearBtn').onclick = async () => {
+  try {
+    await fetch(`${API}/agent/session/${SESSION_ID}`, { method: 'DELETE' });
+  } catch (e) { /* 忽略 */ }
+  chatEl.innerHTML = `
+    <div class="empty">
+      <div class="empty-icon">💬</div>
+      <div>试着问点什么，观察 Agent 的推理过程</div>
+    </div>`;
+  sessionStorage.removeItem('agent_session');
+  location.reload();
+};
+
+loadMeta();
+inputEl.focus();
+</script>
+</body>
+</html>

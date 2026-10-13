@@ -1,0 +1,107 @@
+# ============================================================
+# Agent 服务编排
+# ============================================================
+# 启动：docker compose up -d
+# 查看：docker compose logs -f agent
+# 停止：docker compose down
+#
+# 包含两个服务：
+#   agent  业务服务
+#   redis  会话记忆存储（本地开发用，生产可用外部 Redis）
+
+services:
+  # ==================== Agent 服务 ====================
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: esshop-agent:1.0
+    container_name: esshop-agent
+    restart: unless-stopped
+
+    ports:
+      - "8100:8100"
+
+    # 环境变量：先读 .env，再用下面的 environment 覆盖
+    # ⚠️ 优先级：environment > env_file
+    #    所以容器里用的 Redis 是 compose 内置的那个，不是 .env 里写的远程地址
+    env_file:
+      - .env
+
+    environment:
+      # 容器内访问 Redis 用服务名（compose 自动做 DNS 解析）
+      # 这会覆盖 .env 里的 REDIS_HOST
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+
+      # 容器内访问宿主机上的 MySQL 用 host.docker.internal
+      # 如果你把 MySQL 也放进 compose，就改成 mysql
+      DB_HOST: host.docker.internal
+
+    # 让容器能通过 host.docker.internal 访问宿主机
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8100/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+    networks:
+      - agent-net
+
+    # 日志轮转：防止日志文件撑爆磁盘
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==================== Redis ====================
+  redis:
+    image: redis:7-alpine
+    container_name: esshop-agent-redis
+    restart: unless-stopped
+
+    ports:
+      # 只映射到本机，不暴露到外网
+      - "127.0.0.1:6379:6379"
+
+    # 开启 AOF 持久化：重启后会话记忆不丢
+    command: redis-server --appendonly yes
+
+    volumes:
+      - redis-data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+    networks:
+      - agent-net
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ==================== 数据卷 ====================
+volumes:
+  redis-data:
+    driver: local
+
+# ==================== 网络 ====================
+networks:
+  agent-net:
+    driver: bridge

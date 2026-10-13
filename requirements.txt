@@ -1,0 +1,16 @@
+# Web service
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-dotenv==1.0.1
+pydantic==2.10.4
+
+# Agent core: LLM + function calling
+langchain==0.3.14
+langchain-openai==0.2.14
+langchain-core==0.3.63
+
+# Session memory (Redis)
+redis==8.1.0
+
+# Database (optional, only when USE_REAL_DB=true)
+pymysql==1.1.1
